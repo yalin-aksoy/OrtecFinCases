@@ -52,6 +52,8 @@ class TaskList:
             self._uncheck(parts[1] if len(parts) > 1 else "")
         elif command == "deadline":
             self._add_deadline(parts[1] if len(parts) > 1 else "")
+        elif command == "view-by-deadline":
+            self._view_by_deadline()
         # TODO: implement additional commands from TaskAnalytics
         # elif command == "import":
         # elif command == "export":
@@ -146,6 +148,26 @@ class TaskList:
             self._output_stream.write("\n")
         self._output_stream.flush()
 
+    def _view_by_deadline(self):
+        deadlines_dict = {}
+        for project_name, tasks in self._tasks.items():
+            for task in tasks:
+                if task.deadline not in deadlines_dict:
+                    deadlines_dict[task.deadline] = {project_name: [task]}
+                elif project_name not in deadlines_dict[task.deadline]:
+                    deadlines_dict[task.deadline][project_name] = [task]
+                else:
+                    deadlines_dict[task.deadline][project_name].append(task)
+        for deadline, project_name in sorted(deadlines_dict.items(), key = lambda x: (x is not None, str(x))):
+            if deadline:
+                self._output_stream.write(f"{deadline}:\n")
+            else:
+                self._output_stream.write(f"No Deadline:\n")
+            for project, tasks in project_name.items():
+                self._output_stream.write(f"   {project}:\n")
+                for task in tasks:
+                    self._output_stream.write(f"        {task.id}:{task.description}\n")
+        self._output_stream.flush()
 
     def _help(self):
         self._output_stream.write("Commands:\n")
