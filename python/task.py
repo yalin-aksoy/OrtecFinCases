@@ -1,8 +1,8 @@
-import datetime
+from datetime import date
 
 
 class Task:
-    def __init__(self, id: int, description: str,  done: bool = False, deadline: datetime.datetime = None):
+    def __init__(self, id: int, description: str,  done: bool = False, deadline: date = None):
         self._id = id
         self._description = description
         self._done = done
@@ -21,7 +21,7 @@ class Task:
         return self._done
 
     @property
-    def deadline(self) -> datetime.datetime:
+    def deadline(self) -> date:
         return self._deadline
 
     @done.setter

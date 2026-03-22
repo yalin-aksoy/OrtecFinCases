@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, TextIO
 from xmlrpc.client import DateTime
 
@@ -42,6 +42,8 @@ class TaskList:
         
         if command == "show":
             self._show()
+        elif command == "today":
+            self._today()
         elif command == "add":
             self._add(parts[1] if len(parts) > 1 else "")
         elif command == "check":
@@ -68,7 +70,6 @@ class TaskList:
                 self._output_stream.write(f"    [{status}] {task.id}: {task.description}\n "
                                           f"           {task.deadline}\n")
             self._output_stream.write("\n")
-            print(self._tasks)
         self._output_stream.flush()
 
     def _add(self, command_line: str):
@@ -117,27 +118,39 @@ class TaskList:
 
     def _add_deadline(self, command_line: str,):
         parts = command_line.split(" ", 1)
-        print(parts)
         try:
             task_id = int(parts[0])
         except ValueError:
-            self._output_stream.write(f"Could not find a task with an ID of {task_id}.\n")
+            self._output_stream.write(f"Could not find a task with an ID of \n")
             return
 
         for project_name, tasks in self._tasks.items():
             for task in tasks:
                 if task.id == task_id:
                     try:
-                        print(task.deadline)
-                        task.deadline = datetime.strptime(parts[1], "%d-%m-%Y")
-                        print(task.deadline)
+                        task.deadline = datetime.strptime(parts[1], "%d-%m-%Y").date()
                     except ValueError:
                         self._output_stream.write(f"Could not find a task with an ID of {task_id}.\n")
                         return
+    def _today(self):
+        for project_name, tasks in self._tasks.items():
+            active_project = None
+            for task in tasks:
+                if task.deadline == date.today():
+                    if project_name != active_project:
+                        active_project = project_name
+                        self._output_stream.write(f"{project_name}\n")
+                    status = 'x' if task.done else ' '
+                    self._output_stream.write(f"    [{status}] {task.id}: {task.description}\n "
+                                              f"           {task.deadline}\n")
+            self._output_stream.write("\n")
+        self._output_stream.flush()
+
 
     def _help(self):
         self._output_stream.write("Commands:\n")
         self._output_stream.write("  show\n")
+        self._output_stream.write("  today\n")
         self._output_stream.write("  add project <project name>\n")
         self._output_stream.write("  add task <project name> <task description>\n")
         self._output_stream.write("  check <task ID>\n")
