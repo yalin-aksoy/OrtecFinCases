@@ -1,3 +1,5 @@
+from logging import raiseExceptions
+
 import pandas as pd
 from typing import Dict, List
 from task import Task
@@ -13,13 +15,12 @@ class TaskAnalytics:
         - The 'task_id' column should be converted to int
         - The 'deadline' column should be converted to datetime
         """
-        # TODO: Implement this method
-        raise NotImplementedError("import_from_dict needs to be implemented")
-    
+        return pd.DataFrame(tasks_dict)
+
     def export_to_dict(self, df: pd.DataFrame) -> Dict[str, List[Task]]:
         """Export DataFrame back to dictionary structure.
         """
-        # TODO: Implement this method
+        return df.to_dict()
         raise NotImplementedError("export_to_dict needs to be implemented")
     
     def export_to_csv(self, df: pd.DataFrame, filepath: str) -> None:
@@ -28,7 +29,11 @@ class TaskAnalytics:
         Note:
         - Use pandas to_csv() to save the DataFrame to a CSV file.
         """
-        # TODO: Implement this method
+        try:
+            df.to_csv(filepath, index=False)
+            print(filepath)
+        except Exception:
+            raise SystemError("export_to_csv has failed to execute")
         raise NotImplementedError("export_to_csv needs to be implemented")
     
     def import_from_csv(self, filepath: str) -> pd.DataFrame:
@@ -40,7 +45,10 @@ class TaskAnalytics:
         - The 'task_id' column should be converted to int
         - The 'deadline' column should be converted to datetime
         """
-        # TODO: Implement this method
+        try:
+            df = pd.read_csv(filepath)
+        except Exception:
+            raise SystemError("read_from_csv has failed to execute")
         raise NotImplementedError("import_from_csv needs to be implemented")
       
     def get_project_summary(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -53,6 +61,7 @@ class TaskAnalytics:
         - pending_tasks
         - completion_rate (percentage)
         """
+
         # TODO: Implement this method
         raise NotImplementedError("get_project_summary needs to be implemented")
     
