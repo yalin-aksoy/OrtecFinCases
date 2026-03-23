@@ -1,4 +1,5 @@
 from datetime import date
+from threading import RLock
 from typing import Dict, List, Optional
 
 from task import Task
@@ -20,6 +21,7 @@ class TaskList:
         self._tasks: Dict[str, List[Task]] = {}
         self._last_id = 0
         self._analytics = TaskAnalytics()
+        self._lock = RLock()
         self._initialized = True
 
     @classmethod
@@ -31,24 +33,30 @@ class TaskList:
         cls._instance = None
 
     def list_tasks(self) -> Dict[str, List[Task]]:
-        return self._tasks
+        with self._lock:
+            return {project_name: list(tasks) for project_name, tasks in self._tasks.items()}
 
     def has_project(self, name: str) -> bool:
-        return name in self._tasks
+        with self._lock:
+            return name in self._tasks
 
     def get_project_tasks(self, name: str) -> Optional[List[Task]]:
-        return self._tasks.get(name)
+        with self._lock:
+            project_tasks = self._tasks.get(name)
+            return None if project_tasks is None else list(project_tasks)
 
     def add_project(self, name: str) -> None:
-        self._tasks[name] = []
+        with self._lock:
+            self._tasks[name] = []
 
     def add_task(self, project: str, description: str) -> bool:
-        project_tasks = self._tasks.get(project)
-        if project_tasks is None:
-            return False
+        with self._lock:
+            project_tasks = self._tasks.get(project)
+            if project_tasks is None:
+                return False
 
-        project_tasks.append(Task(self._next_id(), description, False))
-        return True
+            project_tasks.append(Task(self._next_id(), description, False))
+            return True
 
     def check(self, task_id: int) -> bool:
         return self.set_done(task_id, True)
@@ -57,43 +65,48 @@ class TaskList:
         return self.set_done(task_id, False)
 
     def set_done(self, task_id: int, done: bool) -> bool:
-        for tasks in self._tasks.values():
-            for task in tasks:
-                if task.id == task_id:
-                    task.done = done
-                    return True
-        return False
+        with self._lock:
+            for tasks in self._tasks.values():
+                for task in tasks:
+                    if task.id == task_id:
+                        task.done = done
+                        return True
+            return False
 
     def add_deadline(self, task_id: int, deadline: date) -> bool:
-        for tasks in self._tasks.values():
-            for task in tasks:
-                if task.id == task_id:
-                    task.deadline = deadline
-                    return True
-        return False
+        with self._lock:
+            for tasks in self._tasks.values():
+                for task in tasks:
+                    if task.id == task_id:
+                        task.deadline = deadline
+                        return True
+            return False
 
     def get_task(self, task_id: int) -> Optional[Task]:
-        for tasks in self._tasks.values():
-            for task in tasks:
-                if task.id == task_id:
-                    return task
-        return None
+        with self._lock:
+            for tasks in self._tasks.values():
+                for task in tasks:
+                    if task.id == task_id:
+                        return task
+            return None
 
     def get_by_deadline(self) -> Dict[date | None, Dict[str, List[Task]]]:
-        deadlines_dict: Dict[date | None, Dict[str, List[Task]]] = {}
-        for project_name, tasks in self._tasks.items():
-            for task in tasks:
-                project_tasks = deadlines_dict.setdefault(task.deadline, {})
-                project_tasks.setdefault(project_name, []).append(task)
-        return deadlines_dict
+        with self._lock:
+            deadlines_dict: Dict[date | None, Dict[str, List[Task]]] = {}
+            for project_name, tasks in self._tasks.items():
+                for task in tasks:
+                    project_tasks = deadlines_dict.setdefault(task.deadline, {})
+                    project_tasks.setdefault(project_name, []).append(task)
+            return deadlines_dict
 
     def get_today_tasks(self) -> Dict[str, List[Task]]:
-        today = date.today()
-        return {
-            project_name: [task for task in tasks if task.deadline == today]
-            for project_name, tasks in self._tasks.items()
-            if any(task.deadline == today for task in tasks)
-        }
+        with self._lock:
+            today = date.today()
+            return {
+                project_name: [task for task in tasks if task.deadline == today]
+                for project_name, tasks in self._tasks.items()
+                if any(task.deadline == today for task in tasks)
+            }
 
     def _next_id(self) -> int:
         self._last_id += 1
