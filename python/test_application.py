@@ -1,18 +1,25 @@
 import io
 import pytest
+from task_controller import TaskController
 from task_list import TaskList
 
 
 @pytest.fixture
 def task_list() -> TaskList:
-    input_stream = io.StringIO()
-    output_stream = io.StringIO()
-    return TaskList(input_stream, output_stream)
+    TaskList.reset_instance()
+    return TaskList.get_instance()
 
 
 @pytest.fixture
-def output_stream(task_list: TaskList) -> io.StringIO:
-    return task_list._output_stream
+def controller(task_list: TaskList) -> TaskController:
+    input_stream = io.StringIO()
+    output_stream = io.StringIO()
+    return TaskController(task_list, input_stream, output_stream)
+
+
+@pytest.fixture
+def output_stream(controller: TaskController) -> io.StringIO:
+    return controller._output_stream
 
 
 def clear_output(output_stream: io.StringIO) -> None:
@@ -24,20 +31,20 @@ def get_output(output_stream: io.StringIO) -> str:
     return output_stream.getvalue()
 
 
-def test_show_empty_task_list(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_show_empty_task_list(controller: TaskController, output_stream: io.StringIO) -> None:
     
     clear_output(output_stream)
-    task_list.execute("show")
+    controller.execute("show")
     
     assert get_output(output_stream) == ""
 
 
-def test_add_single_project(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_add_single_project(controller: TaskController, output_stream: io.StringIO) -> None:
 
-    task_list.execute("add project secrets")
+    controller.execute("add project secrets")
     clear_output(output_stream)
     
-    task_list.execute("show")
+    controller.execute("show")
     output = get_output(output_stream)
     lines = output.strip().split('\n')
     
@@ -48,14 +55,14 @@ def test_add_single_project(task_list: TaskList, output_stream: io.StringIO) -> 
     assert lines == expected_lines
 
 
-def test_add_tasks_to_project(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_add_tasks_to_project(controller: TaskController, output_stream: io.StringIO) -> None:
 
-    task_list.execute("add project secrets")
-    task_list.execute("add task secrets Eat more donuts.")
-    task_list.execute("add task secrets Destroy all humans.")
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    controller.execute("add task secrets Destroy all humans.")
     clear_output(output_stream)
     
-    task_list.execute("show")
+    controller.execute("show")
     output = get_output(output_stream)
     lines = output.strip().split('\n')
     
@@ -68,14 +75,14 @@ def test_add_tasks_to_project(task_list: TaskList, output_stream: io.StringIO) -
     assert lines == expected_lines
 
 
-def test_check_task_marks_as_done(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_check_task_marks_as_done(controller: TaskController, output_stream: io.StringIO) -> None:
 
-    task_list.execute("add project secrets")
-    task_list.execute("add task secrets Eat more donuts.")
-    task_list.execute("check 1")
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    controller.execute("check 1")
     clear_output(output_stream)
     
-    task_list.execute("show")
+    controller.execute("show")
     output = get_output(output_stream)
     lines = output.strip().split('\n')
     
@@ -87,15 +94,15 @@ def test_check_task_marks_as_done(task_list: TaskList, output_stream: io.StringI
     assert lines == expected_lines
 
 
-def test_uncheck_task_marks_as_not_done(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_uncheck_task_marks_as_not_done(controller: TaskController, output_stream: io.StringIO) -> None:
 
-    task_list.execute("add project secrets")
-    task_list.execute("add task secrets Eat more donuts.")
-    task_list.execute("check 1")
-    task_list.execute("uncheck 1")
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    controller.execute("check 1")
+    controller.execute("uncheck 1")
     clear_output(output_stream)
     
-    task_list.execute("show")
+    controller.execute("show")
     output = get_output(output_stream)
     lines = output.strip().split('\n')
     
@@ -107,24 +114,24 @@ def test_uncheck_task_marks_as_not_done(task_list: TaskList, output_stream: io.S
     assert lines == expected_lines
 
 
-def test_multiple_projects_with_tasks(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_multiple_projects_with_tasks(controller: TaskController, output_stream: io.StringIO) -> None:
 
     # Add first project with tasks
-    task_list.execute("add project secrets")
-    task_list.execute("add task secrets Eat more donuts.")
-    task_list.execute("add task secrets Destroy all humans.")
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    controller.execute("add task secrets Destroy all humans.")
     
     # Add second project with tasks
-    task_list.execute("add project training")
-    task_list.execute("add task training Four Elements of Simple Design")
-    task_list.execute("add task training SOLID")
-    task_list.execute("add task training Coupling and Cohesion")
-    task_list.execute("add task training Primitive Obsession")
-    task_list.execute("add task training Outside-In TDD")
-    task_list.execute("add task training Interaction-Driven Design")
+    controller.execute("add project training")
+    controller.execute("add task training Four Elements of Simple Design")
+    controller.execute("add task training SOLID")
+    controller.execute("add task training Coupling and Cohesion")
+    controller.execute("add task training Primitive Obsession")
+    controller.execute("add task training Outside-In TDD")
+    controller.execute("add task training Interaction-Driven Design")
     
     clear_output(output_stream)
-    task_list.execute("show")
+    controller.execute("show")
     output = get_output(output_stream)
     lines = output.strip().split('\n')
     
@@ -146,29 +153,29 @@ def test_multiple_projects_with_tasks(task_list: TaskList, output_stream: io.Str
     assert lines == expected_lines
 
 
-def test_check_multiple_tasks_across_projects(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_check_multiple_tasks_across_projects(controller: TaskController, output_stream: io.StringIO) -> None:
 
     # Setup projects and tasks
-    task_list.execute("add project secrets")
-    task_list.execute("add task secrets Eat more donuts.")
-    task_list.execute("add task secrets Destroy all humans.")
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    controller.execute("add task secrets Destroy all humans.")
     
-    task_list.execute("add project training")
-    task_list.execute("add task training Four Elements of Simple Design")
-    task_list.execute("add task training SOLID")
-    task_list.execute("add task training Coupling and Cohesion")
-    task_list.execute("add task training Primitive Obsession")
-    task_list.execute("add task training Outside-In TDD")
-    task_list.execute("add task training Interaction-Driven Design")
+    controller.execute("add project training")
+    controller.execute("add task training Four Elements of Simple Design")
+    controller.execute("add task training SOLID")
+    controller.execute("add task training Coupling and Cohesion")
+    controller.execute("add task training Primitive Obsession")
+    controller.execute("add task training Outside-In TDD")
+    controller.execute("add task training Interaction-Driven Design")
     
     # Check specific tasks
-    task_list.execute("check 1")
-    task_list.execute("check 3")
-    task_list.execute("check 5")
-    task_list.execute("check 6")
+    controller.execute("check 1")
+    controller.execute("check 3")
+    controller.execute("check 5")
+    controller.execute("check 6")
     
     clear_output(output_stream)
-    task_list.execute("show")
+    controller.execute("show")
     output = get_output(output_stream)
     lines = output.strip().split('\n')
     
@@ -190,10 +197,10 @@ def test_check_multiple_tasks_across_projects(task_list: TaskList, output_stream
     assert lines == expected_lines
 
 
-def test_add_task_to_nonexistent_project(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_add_task_to_nonexistent_project(controller: TaskController, output_stream: io.StringIO) -> None:
 
     clear_output(output_stream)
-    task_list.execute("add task nonexistent Some task")
+    controller.execute("add task nonexistent Some task")
     output = get_output(output_stream)
     lines = output.strip().split('\n')
     
@@ -204,13 +211,13 @@ def test_add_task_to_nonexistent_project(task_list: TaskList, output_stream: io.
     assert lines == expected_lines
 
 
-def test_check_nonexistent_task(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_check_nonexistent_task(controller: TaskController, output_stream: io.StringIO) -> None:
 
-    task_list.execute("add project secrets")
-    task_list.execute("add task secrets Eat more donuts.")
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
     clear_output(output_stream)
     
-    task_list.execute("check 999")
+    controller.execute("check 999")
     output = get_output(output_stream)
     lines = output.strip().split('\n')
     
@@ -221,16 +228,16 @@ def test_check_nonexistent_task(task_list: TaskList, output_stream: io.StringIO)
     assert lines == expected_lines
 
 
-def test_task_id_increments_across_projects(task_list: TaskList, output_stream: io.StringIO) -> None:
+def test_task_id_increments_across_projects(controller: TaskController, output_stream: io.StringIO) -> None:
 
-    task_list.execute("add project project1")
-    task_list.execute("add task project1 Task 1")
-    task_list.execute("add project project2")
-    task_list.execute("add task project2 Task 2")
-    task_list.execute("add task project1 Task 3")
+    controller.execute("add project project1")
+    controller.execute("add task project1 Task 1")
+    controller.execute("add project project2")
+    controller.execute("add task project2 Task 2")
+    controller.execute("add task project1 Task 3")
     clear_output(output_stream)
     
-    task_list.execute("show")
+    controller.execute("show")
     output = get_output(output_stream)
     lines = output.strip().split('\n')
     

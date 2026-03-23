@@ -1,12 +1,12 @@
 import sys
-from task_list import TaskList
-from task_controller import app
 
+from task_controller import TaskController
+from task_web import app
 
 def main():
     if len(sys.argv) == 1:
         print("Starting console Application")
-        TaskList.start_console()
+        TaskController.start_console()
     else:
         app.run(host='localhost', port=8080, debug=True)
         print("localhost:8080/tasks")

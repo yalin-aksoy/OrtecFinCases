@@ -1,209 +1,86 @@
-import sys
-from datetime import date, datetime
-from typing import Dict, List, TextIO
+from datetime import date
+from typing import Dict, List, Optional
 
 from task import Task
 from task_analytics import TaskAnalytics
 
 
 class TaskList:
-    QUIT = "quit"
+    _instance: Optional["TaskList"] = None
 
-    def __init__(self, input_stream: TextIO, output_stream: TextIO):
+    def __new__(cls) -> "TaskList":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
         self._tasks: Dict[str, List[Task]] = {}
-        self._input_stream = input_stream
-        self._output_stream = output_stream
         self._last_id = 0
         self._analytics = TaskAnalytics()
+        self._initialized = True
 
-    @staticmethod
-    def start_console():
-        task_list = TaskList(sys.stdin, sys.stdout)
-        task_list.run()
+    @classmethod
+    def get_instance(cls) -> "TaskList":
+        return cls()
 
-    def run(self):
-        self._output_stream.write("Welcome to TaskList! Type 'help' for available commands.\n")
-        self._output_stream.flush()
-        
-        while True:
-            self._output_stream.write("> ")
-            self._output_stream.flush()
-            command = self._input_stream.readline().strip()
-            
-            if command == self.QUIT:
-                break
-            
-            self.execute(command)
+    @classmethod
+    def reset_instance(cls) -> None:
+        cls._instance = None
 
-    def execute(self, command_line: str):
-        parts = command_line.split(" ", 1)
-        command = parts[0]
-        
-        if command == "show":
-            self._show()
-        elif command == "today":
-            self._today()
-        elif command == "add":
-            self._add(parts[1] if len(parts) > 1 else "")
-        elif command == "check":
-            self.check(parts[1] if len(parts) > 1 else "")
-        elif command == "uncheck":
-            self.uncheck(parts[1] if len(parts) > 1 else "")
-        elif command == "deadline":
-            self._add_deadline(parts[1] if len(parts) > 1 else "")
-        elif command == "view-by-deadline":
-            self._view_by_deadline()
-        # TODO: implement additional commands from TaskAnalytics
-        # elif command == "import":
-        # elif command == "export":
-        # elif command == "summary":
-        # etc.
-        elif command == "help":
-            self._help()
-        else:
-            self._error(command)
-
-    def list_tasks(self):
+    def list_tasks(self) -> Dict[str, List[Task]]:
         return self._tasks
 
-    def add_project(self, name: str):
+    def add_project(self, name: str) -> None:
         self._tasks[name] = []
 
-    def add_task(self, project: str, description: str):
+    def add_task(self, project: str, description: str) -> bool:
         project_tasks = self._tasks.get(project)
         if project_tasks is None:
             return False
-        
+
         project_tasks.append(Task(self._next_id(), description, False))
         return True
 
-    def check(self, id_string: str):
-        self._set_done(id_string, True)
+    def check(self, task_id: int) -> bool:
+        return self.set_done(task_id, True)
 
-    def uncheck(self, id_string: str):
-        self._set_done(id_string, False)
+    def uncheck(self, task_id: int) -> bool:
+        return self.set_done(task_id, False)
 
-    def set_done(self, id_string: int, done: bool):
-        try:
-            task_id = int(id_string)
-        except ValueError:
-            return False
-        for project_name, tasks in self._tasks.items():
+    def set_done(self, task_id: int, done: bool) -> bool:
+        for tasks in self._tasks.values():
             for task in tasks:
                 if task.id == task_id:
                     task.done = done
-        return True
+                    return True
+        return False
 
-    def add_deadline(self, task_id:int, deadline:date):
-        for project_name, tasks in self._tasks.items():
+    def add_deadline(self, task_id: int, deadline: date) -> bool:
+        for tasks in self._tasks.values():
             for task in tasks:
                 if task.id == task_id:
                     task.deadline = deadline
                     return True
         return False
 
-    def get_by_deadline(self):
-        deadlines_dict = {}
+    def get_by_deadline(self) -> Dict[date | None, Dict[str, List[Task]]]:
+        deadlines_dict: Dict[date | None, Dict[str, List[Task]]] = {}
         for project_name, tasks in self._tasks.items():
             for task in tasks:
-                if task.deadline not in deadlines_dict:
-                    deadlines_dict[task.deadline] = {project_name: [task]}
-                elif project_name not in deadlines_dict[task.deadline]:
-                    deadlines_dict[task.deadline][project_name] = [task]
-                else:
-                    deadlines_dict[task.deadline][project_name].append(task)
+                project_tasks = deadlines_dict.setdefault(task.deadline, {})
+                project_tasks.setdefault(project_name, []).append(task)
         return deadlines_dict
 
-    def _show(self):
-        for project_name, tasks in self._tasks.items():
-            self._output_stream.write(f"{project_name}\n")
-            for task in tasks:
-                status = 'x' if task.done else ' '
-                self._output_stream.write(f"    [{status}] {task.id}: {task.description}\n "
-                                          f"           {task.deadline}\n")
-            self._output_stream.write("\n")
-        self._output_stream.flush()
-
-    def _add(self, command_line: str):
-        parts = command_line.split(" ", 1)
-        subcommand = parts[0]
-
-        if subcommand == "project":
-            self.add_project(parts[1] if len(parts) > 1 else "")
-        elif subcommand == "task":
-            task_parts = parts[1].split(" ", 1) if len(parts) > 1 else []
-            if len(task_parts) >= 2:
-                if not (self.add_task(task_parts[0], task_parts[1])):
-                    self._output_stream.write(f'Could not find a project with the name "{parts[1]}".\n')
-                    self._output_stream.flush()
-
-    def _set_done(self, id_string: str, done: bool):
-        try:
-            task_id = int(id_string)
-        except ValueError:
-            return
-        if not self.set_done(task_id, done):
-            self._output_stream.write(f"Could not find a task with an ID of {task_id}.\n")
-            self._output_stream.flush()
-
-    def _add_deadline(self, command_line: str,):
-        parts = command_line.split(" ", 1)
-        try:
-            task_id = int(parts[0])
-        except ValueError:
-            self._output_stream.write(f"ID shall be given as int \n")
-            return
-        try:
-            deadline = datetime.strptime(parts[1], "%d-%m-%Y").date()
-        except ValueError:
-            self._output_stream.write(f"Date format shall be dd-mm-yyyy \n")
-            return
-
-        if not self.add_deadline(task_id, deadline):
-            self._output_stream.write(f"Could not find a task with an ID of \n")
-
-    def _today(self):
-        for project_name, tasks in self._tasks.items():
-            active_project = None
-            for task in tasks:
-                if task.deadline == date.today():
-                    if project_name != active_project:
-                        active_project = project_name
-                        self._output_stream.write(f"{project_name}\n")
-                    status = 'x' if task.done else ' '
-                    self._output_stream.write(f"    [{status}] {task.id}: {task.description}\n "
-                                              f"           {task.deadline}\n")
-            self._output_stream.write("\n")
-        self._output_stream.flush()
-
-    def _view_by_deadline(self):
-        deadlines_dict = self.get_by_deadline()
-        for deadline, project_name in sorted(deadlines_dict.items(), key = lambda x: (x is not None, str(x))):
-            if deadline:
-                self._output_stream.write(f"{deadline}:\n")
-            else:
-                self._output_stream.write(f"No Deadline:\n")
-            for project, tasks in project_name.items():
-                self._output_stream.write(f"   {project}:\n")
-                for task in tasks:
-                    self._output_stream.write(f"        {task.id}:{task.description}\n")
-        self._output_stream.flush()
-
-    def _help(self):
-        self._output_stream.write("Commands:\n")
-        self._output_stream.write("  show\n")
-        self._output_stream.write("  today\n")
-        self._output_stream.write("  add project <project name>\n")
-        self._output_stream.write("  add task <project name> <task description>\n")
-        self._output_stream.write("  check <task ID>\n")
-        self._output_stream.write("  uncheck <task ID>\n")
-        self._output_stream.write("  deadline <task ID> <datetime dd-mm-yyyy>\n")
-        self._output_stream.write("\n")
-        self._output_stream.flush()
-
-    def _error(self, command: str):
-        self._output_stream.write(f'I don\'t know what the command "{command}" is.\n')
-        self._output_stream.flush()
+    def get_today_tasks(self) -> Dict[str, List[Task]]:
+        today = date.today()
+        return {
+            project_name: [task for task in tasks if task.deadline == today]
+            for project_name, tasks in self._tasks.items()
+            if any(task.deadline == today for task in tasks)
+        }
 
     def _next_id(self) -> int:
         self._last_id += 1
