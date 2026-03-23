@@ -1,4 +1,6 @@
 import io
+from datetime import date, timedelta
+
 import pytest
 from task_controller import TaskController
 from task_list import TaskList
@@ -252,3 +254,132 @@ def test_task_id_increments_across_projects(controller: TaskController, output_s
     ]
     
     assert lines == expected_lines
+
+
+def test_add_deadline_shows_under_task(controller: TaskController, output_stream: io.StringIO) -> None:
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    controller.execute("deadline 1 24-03-2026")
+    clear_output(output_stream)
+
+    controller.execute("show")
+    output = get_output(output_stream)
+    lines = output.strip().split("\n")
+
+    expected_lines = [
+        "secrets",
+        "    [ ] 1: Eat more donuts.",
+        "           2026-03-24",
+    ]
+
+    assert lines == expected_lines
+
+
+def test_add_deadline_for_missing_task_returns_error(controller: TaskController, output_stream: io.StringIO) -> None:
+    controller.execute("add project secrets")
+    clear_output(output_stream)
+
+    controller.execute("deadline 99 24-03-2026")
+
+    assert get_output(output_stream).strip() == "Could not find a task with an ID of 99."
+
+
+def test_add_deadline_with_invalid_id_returns_error(controller: TaskController, output_stream: io.StringIO) -> None:
+    clear_output(output_stream)
+
+    controller.execute("deadline nope 24-03-2026")
+
+    assert get_output(output_stream).strip() == "ID shall be given as int"
+
+
+def test_add_deadline_with_invalid_date_returns_error(controller: TaskController, output_stream: io.StringIO) -> None:
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    clear_output(output_stream)
+
+    controller.execute("deadline 1 2026-03-24")
+
+    assert get_output(output_stream).strip() == "Date format shall be dd-mm-yyyy"
+
+
+def test_today_shows_only_tasks_due_today(controller: TaskController, output_stream: io.StringIO) -> None:
+    today_string = date.today().strftime("%d-%m-%Y")
+    tomorrow_string = (date.today() + timedelta(days=1)).strftime("%d-%m-%Y")
+
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    controller.execute("add task secrets Destroy all humans.")
+    controller.execute("deadline 1 " + today_string)
+    controller.execute("deadline 2 " + tomorrow_string)
+
+    controller.execute("add project training")
+    controller.execute("add task training SOLID")
+    controller.execute("deadline 3 " + today_string)
+    clear_output(output_stream)
+
+    controller.execute("today")
+    output = get_output(output_stream)
+    lines = output.strip().split("\n")
+
+    expected_lines = [
+        "secrets",
+        "    [ ] 1: Eat more donuts.",
+        f"           {date.today()}",
+        "",
+        "training",
+        "    [ ] 3: SOLID",
+        f"           {date.today()}",
+    ]
+
+    assert lines == expected_lines
+
+
+def test_today_returns_empty_when_nothing_is_due_today(controller: TaskController, output_stream: io.StringIO) -> None:
+    tomorrow_string = (date.today() + timedelta(days=1)).strftime("%d-%m-%Y")
+
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    controller.execute("deadline 1 " + tomorrow_string)
+    clear_output(output_stream)
+
+    controller.execute("today")
+
+    assert get_output(output_stream) == ""
+
+
+def test_view_by_deadline_groups_none_and_dates(controller: TaskController, output_stream: io.StringIO) -> None:
+    controller.execute("add project secrets")
+    controller.execute("add task secrets Eat more donuts.")
+    controller.execute("add task secrets Destroy all humans.")
+    controller.execute("deadline 2 24-03-2026")
+
+    controller.execute("add project training")
+    controller.execute("add task training SOLID")
+    controller.execute("deadline 3 23-03-2026")
+    clear_output(output_stream)
+
+    controller.execute("view-by-deadline")
+    output = get_output(output_stream)
+    lines = output.strip().split("\n")
+
+    expected_lines = [
+        "2026-03-23:",
+        "   training:",
+        "        3:SOLID",
+        "2026-03-24:",
+        "   secrets:",
+        "        2:Destroy all humans.",
+        "No Deadline:",
+        "   secrets:",
+        "        1:Eat more donuts.",
+    ]
+
+    assert lines == expected_lines
+
+
+def main() -> int:
+    return pytest.main([__file__])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
