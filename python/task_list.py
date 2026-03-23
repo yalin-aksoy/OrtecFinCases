@@ -33,6 +33,12 @@ class TaskList:
     def list_tasks(self) -> Dict[str, List[Task]]:
         return self._tasks
 
+    def has_project(self, name: str) -> bool:
+        return name in self._tasks
+
+    def get_project_tasks(self, name: str) -> Optional[List[Task]]:
+        return self._tasks.get(name)
+
     def add_project(self, name: str) -> None:
         self._tasks[name] = []
 
@@ -65,6 +71,13 @@ class TaskList:
                     task.deadline = deadline
                     return True
         return False
+
+    def get_task(self, task_id: int) -> Optional[Task]:
+        for tasks in self._tasks.values():
+            for task in tasks:
+                if task.id == task_id:
+                    return task
+        return None
 
     def get_by_deadline(self) -> Dict[date | None, Dict[str, List[Task]]]:
         deadlines_dict: Dict[date | None, Dict[str, List[Task]]] = {}

@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import pytest
 from task_controller import TaskController
 from task_list import TaskList
+from task_web import app
 
 
 @pytest.fixture
@@ -17,6 +18,13 @@ def controller(task_list: TaskList) -> TaskController:
     input_stream = io.StringIO()
     output_stream = io.StringIO()
     return TaskController(task_list, input_stream, output_stream)
+
+
+@pytest.fixture
+def client(task_list: TaskList):
+    app.testing = True
+    with app.test_client() as test_client:
+        yield test_client
 
 
 @pytest.fixture
@@ -375,6 +383,189 @@ def test_view_by_deadline_groups_none_and_dates(controller: TaskController, outp
     ]
 
     assert lines == expected_lines
+
+
+def test_create_project_route(client) -> None:
+    response = client.post("/projects", json={"name": "secrets"})
+
+    assert response.status_code == 201
+    assert response.get_json() == {"name": "secrets", "tasks": []}
+
+
+def test_get_projects_route_returns_projects_and_tasks(client, task_list: TaskList) -> None:
+    task_list.add_project("secrets")
+    task_list.add_task("secrets", "Eat more donuts.")
+    task_list.add_project("training")
+    task_list.add_task("training", "SOLID")
+    task_list.add_deadline(2, date(2026, 3, 23))
+
+    response = client.get("/projects")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "projects": [
+            {
+                "name": "secrets",
+                "tasks": [
+                    {
+                        "id": 1,
+                        "description": "Eat more donuts.",
+                        "done": False,
+                        "deadline": None,
+                    }
+                ],
+            },
+            {
+                "name": "training",
+                "tasks": [
+                    {
+                        "id": 2,
+                        "description": "SOLID",
+                        "done": False,
+                        "deadline": "2026-03-23",
+                    }
+                ],
+            },
+        ]
+    }
+
+
+def test_create_project_route_rejects_missing_name(client) -> None:
+    response = client.post("/projects", json={})
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Project name is required."}
+
+
+def test_create_project_route_rejects_duplicate_project(client, task_list: TaskList) -> None:
+    task_list.add_project("secrets")
+
+    response = client.post("/projects", json={"name": "secrets"})
+
+    assert response.status_code == 409
+    assert response.get_json() == {"error": 'Project "secrets" already exists.'}
+
+
+def test_create_task_route(client, task_list: TaskList) -> None:
+    task_list.add_project("secrets")
+
+    response = client.post("/projects/secrets/tasks", json={"description": "Eat more donuts."})
+
+    assert response.status_code == 201
+    assert response.get_json() == {
+        "id": 1,
+        "description": "Eat more donuts.",
+        "done": False,
+        "deadline": None,
+    }
+
+
+def test_create_task_route_rejects_missing_project(client) -> None:
+    response = client.post("/projects/secrets/tasks", json={"description": "Eat more donuts."})
+
+    assert response.status_code == 404
+    assert response.get_json() == {"error": 'Project "secrets" not found.'}
+
+
+def test_update_task_deadline_route(client, task_list: TaskList) -> None:
+    task_list.add_project("secrets")
+    task_list.add_task("secrets", "Eat more donuts.")
+
+    response = client.put("/projects/secrets/tasks/1?deadline=24-03-2026")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "id": 1,
+        "description": "Eat more donuts.",
+        "done": False,
+        "deadline": "2026-03-24",
+    }
+
+
+def test_update_task_deadline_route_rejects_missing_deadline(client, task_list: TaskList) -> None:
+    task_list.add_project("secrets")
+    task_list.add_task("secrets", "Eat more donuts.")
+
+    response = client.put("/projects/secrets/tasks/1")
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Deadline query parameter is required."}
+
+
+def test_update_task_deadline_route_rejects_invalid_deadline(client, task_list: TaskList) -> None:
+    task_list.add_project("secrets")
+    task_list.add_task("secrets", "Eat more donuts.")
+
+    response = client.put("/projects/secrets/tasks/1?deadline=2026-03-24")
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Deadline format shall be dd-mm-yyyy."}
+
+
+def test_get_projects_view_by_deadline_route(client, task_list: TaskList) -> None:
+    task_list.add_project("secrets")
+    task_list.add_task("secrets", "Eat more donuts.")
+    task_list.add_task("secrets", "Destroy all humans.")
+    task_list.add_project("training")
+    task_list.add_task("training", "SOLID")
+    task_list.add_deadline(2, date(2026, 3, 24))
+    task_list.add_deadline(3, date(2026, 3, 23))
+
+    response = client.get("/projects/view_by_deadline")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "deadlines": [
+            {
+                "deadline": "2026-03-23",
+                "projects": [
+                    {
+                        "name": "training",
+                        "tasks": [
+                            {
+                                "id": 3,
+                                "description": "SOLID",
+                                "done": False,
+                                "deadline": "2026-03-23",
+                            }
+                        ],
+                    }
+                ],
+            },
+            {
+                "deadline": "2026-03-24",
+                "projects": [
+                    {
+                        "name": "secrets",
+                        "tasks": [
+                            {
+                                "id": 2,
+                                "description": "Destroy all humans.",
+                                "done": False,
+                                "deadline": "2026-03-24",
+                            }
+                        ],
+                    }
+                ],
+            },
+            {
+                "deadline": None,
+                "projects": [
+                    {
+                        "name": "secrets",
+                        "tasks": [
+                            {
+                                "id": 1,
+                                "description": "Eat more donuts.",
+                                "done": False,
+                                "deadline": None,
+                            }
+                        ],
+                    }
+                ],
+            },
+        ]
+    }
 
 
 def main() -> int:
