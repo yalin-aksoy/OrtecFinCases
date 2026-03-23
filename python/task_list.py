@@ -1,7 +1,6 @@
 import sys
 from datetime import date, datetime
 from typing import Dict, List, TextIO
-from xmlrpc.client import DateTime
 
 from task import Task
 from task_analytics import TaskAnalytics
@@ -47,9 +46,9 @@ class TaskList:
         elif command == "add":
             self._add(parts[1] if len(parts) > 1 else "")
         elif command == "check":
-            self._check(parts[1] if len(parts) > 1 else "")
+            self.check(parts[1] if len(parts) > 1 else "")
         elif command == "uncheck":
-            self._uncheck(parts[1] if len(parts) > 1 else "")
+            self.uncheck(parts[1] if len(parts) > 1 else "")
         elif command == "deadline":
             self._add_deadline(parts[1] if len(parts) > 1 else "")
         elif command == "view-by-deadline":
@@ -64,6 +63,57 @@ class TaskList:
         else:
             self._error(command)
 
+    def list_tasks(self):
+        return self._tasks
+
+    def add_project(self, name: str):
+        self._tasks[name] = []
+
+    def add_task(self, project: str, description: str):
+        project_tasks = self._tasks.get(project)
+        if project_tasks is None:
+            return False
+        
+        project_tasks.append(Task(self._next_id(), description, False))
+        return True
+
+    def check(self, id_string: str):
+        self._set_done(id_string, True)
+
+    def uncheck(self, id_string: str):
+        self._set_done(id_string, False)
+
+    def set_done(self, id_string: int, done: bool):
+        try:
+            task_id = int(id_string)
+        except ValueError:
+            return False
+        for project_name, tasks in self._tasks.items():
+            for task in tasks:
+                if task.id == task_id:
+                    task.done = done
+        return True
+
+    def add_deadline(self, task_id:int, deadline:date):
+        for project_name, tasks in self._tasks.items():
+            for task in tasks:
+                if task.id == task_id:
+                    task.deadline = deadline
+                    return True
+        return False
+
+    def get_by_deadline(self):
+        deadlines_dict = {}
+        for project_name, tasks in self._tasks.items():
+            for task in tasks:
+                if task.deadline not in deadlines_dict:
+                    deadlines_dict[task.deadline] = {project_name: [task]}
+                elif project_name not in deadlines_dict[task.deadline]:
+                    deadlines_dict[task.deadline][project_name] = [task]
+                else:
+                    deadlines_dict[task.deadline][project_name].append(task)
+        return deadlines_dict
+
     def _show(self):
         for project_name, tasks in self._tasks.items():
             self._output_stream.write(f"{project_name}\n")
@@ -77,63 +127,41 @@ class TaskList:
     def _add(self, command_line: str):
         parts = command_line.split(" ", 1)
         subcommand = parts[0]
-        
+
         if subcommand == "project":
-            self._add_project(parts[1] if len(parts) > 1 else "")
+            self.add_project(parts[1] if len(parts) > 1 else "")
         elif subcommand == "task":
             task_parts = parts[1].split(" ", 1) if len(parts) > 1 else []
             if len(task_parts) >= 2:
-                self._add_task(task_parts[0], task_parts[1])
-
-    def _add_project(self, name: str):
-        self._tasks[name] = []
-
-    def _add_task(self, project: str, description: str):
-        project_tasks = self._tasks.get(project)
-        if project_tasks is None:
-            self._output_stream.write(f'Could not find a project with the name "{project}".\n')
-            self._output_stream.flush()
-            return
-        
-        project_tasks.append(Task(self._next_id(), description, False))
-
-    def _check(self, id_string: str):
-        self._set_done(id_string, True)
-
-    def _uncheck(self, id_string: str):
-        self._set_done(id_string, False)
+                if not (self.add_task(task_parts[0], task_parts[1])):
+                    self._output_stream.write(f'Could not find a project with the name "{parts[1]}".\n')
+                    self._output_stream.flush()
 
     def _set_done(self, id_string: str, done: bool):
         try:
             task_id = int(id_string)
         except ValueError:
             return
-        
-        for project_name, tasks in self._tasks.items():
-            for task in tasks:
-                if task.id == task_id:
-                    task.done = done
-                    return
-        
-        self._output_stream.write(f"Could not find a task with an ID of {task_id}.\n")
-        self._output_stream.flush()
+        if not self.set_done(task_id, done):
+            self._output_stream.write(f"Could not find a task with an ID of {task_id}.\n")
+            self._output_stream.flush()
 
     def _add_deadline(self, command_line: str,):
         parts = command_line.split(" ", 1)
         try:
             task_id = int(parts[0])
         except ValueError:
-            self._output_stream.write(f"Could not find a task with an ID of \n")
+            self._output_stream.write(f"ID shall be given as int \n")
+            return
+        try:
+            deadline = datetime.strptime(parts[1], "%d-%m-%Y").date()
+        except ValueError:
+            self._output_stream.write(f"Date format shall be dd-mm-yyyy \n")
             return
 
-        for project_name, tasks in self._tasks.items():
-            for task in tasks:
-                if task.id == task_id:
-                    try:
-                        task.deadline = datetime.strptime(parts[1], "%d-%m-%Y").date()
-                    except ValueError:
-                        self._output_stream.write(f"Could not find a task with an ID of {task_id}.\n")
-                        return
+        if not self.add_deadline(task_id, deadline):
+            self._output_stream.write(f"Could not find a task with an ID of \n")
+
     def _today(self):
         for project_name, tasks in self._tasks.items():
             active_project = None
@@ -149,15 +177,7 @@ class TaskList:
         self._output_stream.flush()
 
     def _view_by_deadline(self):
-        deadlines_dict = {}
-        for project_name, tasks in self._tasks.items():
-            for task in tasks:
-                if task.deadline not in deadlines_dict:
-                    deadlines_dict[task.deadline] = {project_name: [task]}
-                elif project_name not in deadlines_dict[task.deadline]:
-                    deadlines_dict[task.deadline][project_name] = [task]
-                else:
-                    deadlines_dict[task.deadline][project_name].append(task)
+        deadlines_dict = self.get_by_deadline()
         for deadline, project_name in sorted(deadlines_dict.items(), key = lambda x: (x is not None, str(x))):
             if deadline:
                 self._output_stream.write(f"{deadline}:\n")
